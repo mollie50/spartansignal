@@ -24,31 +24,135 @@ def get_bedrock_client():
 
 
 # ── Prompt builder ─────────────────────────────────────────────────────────────
-def build_prompt(notes: str, language: str) -> str:
+def build_prompt(notes: str, language: str, official_source: str) -> str:
+    source_block = (
+        f"\nOFFICIAL SOURCE / CONFIRMATION:\n{official_source}\n"
+        if official_source
+        else "\nOFFICIAL SOURCE / CONFIRMATION:\nNone provided.\n"
+    )
+
     return f"""You are an emergency communications assistant for San José State University (SJSU).
-Your job is to turn raw incident notes into a clear, calm, factual campus alert.
+Your job is to turn raw incident notes into a clear, calm, factual campus alert,
+and to assess the reliability and priority of the information.
 
 STRICT RULES:
-- Do NOT invent, assume, or extrapolate any facts not present in the notes.
-- Do NOT speculate about causes or outcomes unless they are stated in the notes.
+- Do NOT invent, assume, or extrapolate any facts not present in the notes or official source.
+- Do NOT speculate about causes or outcomes unless they are explicitly stated.
 - Use calm, clear language appropriate for students and staff.
-- If information is missing or uncertain, flag it explicitly.
+- NEVER label a fact as "Confirmed" unless it appears in the official source text.
+- Student reports alone must be labeled "Unverified".
+- If the official source conflicts with the incident notes, record the conflict under needs_verification.
+- The coordinator must approve the priority before publishing — do not overstate urgency.
 
 INCIDENT NOTES:
 {notes}
+{source_block}
+PRIORITY GUIDELINES:
+- High: injury, danger to people, fire, active threat, hazardous material, evacuation,
+  emergency services called, major building closure, or campus-wide outage.
+- Medium: water outage, power or internet outage, multiple classrooms affected,
+  or a disruption lasting several hours.
+- Low: minor maintenance issue, small area affected, informational announcement,
+  or no immediate safety risk.
 
-Respond ONLY with a valid JSON object — no markdown fences, no explanation outside the JSON.
-Use exactly these four keys:
+VERIFICATION GUIDELINES:
+- "Confirmed"    — fact is explicitly stated in the official source.
+- "Corroborated" — fact appears in both the incident notes and the official source,
+                   but the official source did not independently originate it.
+- "Unverified"   — no official source provided, or the official source does not mention this fact.
+
+Respond ONLY with a valid JSON object — no markdown fences, no text outside the JSON.
+Use exactly these nine keys:
 
 {{
   "summary": "<One or two sentence factual summary of the incident>",
   "action_steps": ["<Step 1>", "<Step 2>", "..."],
   "uncertainty": "<What information is missing, unclear, or unconfirmed. Write 'None identified.' if everything is clear.>",
-  "translated": "<The full alert (summary + action steps) translated into {language}. If the language is English, repeat the English summary here.>"
+  "translated": "<The full alert (summary + action steps) translated into {language}. If the language is English, repeat the English summary here.>",
+  "verification_status": "<One of: Unverified | Corroborated | Confirmed>",
+  "confirmed_facts": ["<Fact directly supported by the official source or clearly stated in incident notes>", "..."],
+  "needs_verification": ["<Uncertain, conflicting, incomplete, or unconfirmed detail>", "..."],
+  "priority": "<One of: Low | Medium | High>",
+  "priority_reason": "<One or two sentences explaining the recommended priority based on the guidelines above.>"
 }}
 
 The translated field must be in {language}.
 """
+
+
+# ── Deterministic priority safety override ────────────────────────────────────
+# These run AFTER the Bedrock response is parsed. They ensure that language
+# describing genuine danger can never be silently downgraded to "Low" by the
+# model. Bedrock's priority_reason is preserved; the priority value is replaced
+# when a safety keyword is found.
+
+_HIGH_TERMS = [
+    "active threat", "active shooter", "shooter",
+    "violence", "violent", "assault", "weapon",
+    "fire", "flames", "burning",
+    "explosion", "exploded", "blast",
+    "smoke",
+    "gas leak", "gas leak", "natural gas", "hazardous material",
+    "haz mat", "hazmat", "chemical spill", "toxic",
+    "serious injury", "injured", "injuries", "casualty", "casualties",
+    "evacuation", "evacuate", "evacuated",
+    "emergency services", "fire department", "police",
+    "ambulance", "paramedic", "911",
+    "earthquake",
+    "building collapse", "structural damage", "collapsed",
+]
+
+_MEDIUM_TERMS = [
+    "water outage", "water main", "burst pipe", "flooding", "flood",
+    "power outage", "power failure", "blackout", "no power",
+    "internet outage", "network outage", "connectivity",
+    "multiple classrooms", "several classrooms",
+    "building repair", "building closure", "closed building",
+    "utility failure", "utility outage", "outage",
+    "disruption", "service disruption",
+]
+
+_HIGH_OVERRIDE_REASON = (
+    "High priority because the report may involve immediate danger, "
+    "emergency response, or evacuation."
+)
+
+
+def _contains_any(text: str, terms: list) -> bool:
+    """Return True if any term appears as a substring (case-insensitive)."""
+    lower = text.lower()
+    return any(t in lower for t in terms)
+
+
+def apply_priority_override(parsed: dict, notes: str, official_source: str) -> dict:
+    """
+    Override Bedrock's priority when safety-critical or disruption terms are
+    present in the incident text.  Bedrock's priority_reason is kept so the
+    coordinator still sees the model's explanation alongside the override.
+    """
+    # Combine everything Bedrock should have considered
+    combined = f"{notes} {official_source}".strip()
+
+    if _contains_any(combined, _HIGH_TERMS):
+        if parsed.get("priority") != "High":
+            parsed["priority"] = "High"
+            # Prepend the safety override note; keep Bedrock's own reasoning too
+            bedrock_reason = parsed.get("priority_reason", "").strip()
+            parsed["priority_reason"] = (
+                _HIGH_OVERRIDE_REASON
+                + (f" (Bedrock note: {bedrock_reason})" if bedrock_reason else "")
+            )
+    elif _contains_any(combined, _MEDIUM_TERMS):
+        if parsed.get("priority") == "Low":
+            parsed["priority"] = "Medium"
+            bedrock_reason = parsed.get("priority_reason", "").strip()
+            parsed["priority_reason"] = (
+                "Medium priority because the report describes a service "
+                "disruption or outage affecting campus operations."
+                + (f" (Bedrock note: {bedrock_reason})" if bedrock_reason else "")
+            )
+
+    return parsed
 
 
 # ── /api/generate endpoint ─────────────────────────────────────────────────────
@@ -61,6 +165,7 @@ def generate():
 
     notes = (body.get("notes") or "").strip()
     language = (body.get("language") or "English").strip()
+    official_source = (body.get("official_source") or "").strip()
 
     if not notes:
         return jsonify({"error": "Field 'notes' is required and cannot be empty."}), 400
@@ -80,7 +185,7 @@ def generate():
             )
         }), 500
 
-    prompt = build_prompt(notes, language)
+    prompt = build_prompt(notes, language, official_source)
 
     # Call Bedrock Converse API
     try:
@@ -95,7 +200,7 @@ def generate():
             ],
             inferenceConfig={
                 "temperature": 0.1,   # low temperature for accurate, stable output
-                "maxTokens": 1024,
+                "maxTokens": 2048,
             },
         )
     except ClientError as e:
@@ -128,13 +233,18 @@ def generate():
         }), 500
 
     # Validate expected keys are present
-    expected = {"summary", "action_steps", "uncertainty", "translated"}
+    expected = {"summary", "action_steps", "uncertainty", "translated",
+                "verification_status", "confirmed_facts", "needs_verification",
+                "priority", "priority_reason"}
     missing = expected - set(parsed.keys())
     if missing:
         return jsonify({
             "error": f"Model response missing fields: {', '.join(sorted(missing))}",
             "raw": raw_text[:500],
         }), 500
+
+    # Apply deterministic safety override — must run after key validation
+    parsed = apply_priority_override(parsed, notes, official_source)
 
     return jsonify(parsed)
 

@@ -3,51 +3,90 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SpartanSignal</title>
+  <title>SpartanSignal &mdash; SJSU Emergency Alerts</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <header>
-    <p>SJSU CONTINUITY CENTER</p>
-    <h1>SpartanSignal</h1>
-    <span>&#x25CF; SYSTEM READY</span>
+    <div class="header-inner">
+      <div class="header-text">
+        <p class="header-eyebrow">SJSU CONTINUITY CENTER</p>
+        <h1>SpartanSignal</h1>
+        <p class="header-sub">Emergency Communications Workspace</p>
+      </div>
+      <div class="header-right">
+        <span class="status-badge">&#x25CF;&nbsp;SYSTEM READY</span>
+        <span class="bedrock-badge">Powered by Amazon Bedrock</span>
+      </div>
+    </div>
   </header>
 
   <main>
-    <section class="intro">
-      <p>EMERGENCY COMMUNICATIONS WORKSPACE</p>
-      <h2>Create a clear campus alert</h2>
-      <p>
-        Turn incident updates into accurate, multilingual messages
-        for the SJSU community.
-      </p>
-    </section>
 
     <!-- Input card -->
-    <section class="card">
-      <label for="incident">Incident update</label>
+    <section class="card input-card">
+      <div class="card-title">
+        <span class="card-icon">&#x270F;</span>
+        <div>
+          <h2>New incident alert</h2>
+          <p class="card-desc">Paste raw incident notes below. SpartanSignal will summarize, create action steps, flag gaps, and translate.</p>
+        </div>
+      </div>
 
-      <textarea id="incident"
-        placeholder="Example: Water issue near the Student Union. The building may close at 5 PM."></textarea>
+      <div class="speech-label-row">
+        <label for="incident">Incident notes</label>
+        <div class="speech-controls">
+          <select id="speech-lang" class="speech-lang-select" aria-label="Speech input language">
+            <option value="en-US">English</option>
+            <option value="ja-JP">Japanese</option>
+            <option value="zh-CN">Chinese</option>
+            <option value="mn-MN">Mongolian</option>
+          </select>
+          <button id="mic-btn" type="button" onclick="toggleSpeech()" aria-label="Start voice input">
+            <span id="mic-icon">&#x1F3A4;</span>
+            <span id="mic-text">Speak</span>
+          </button>
+        </div>
+      </div>
+      <textarea id="incident" placeholder="Example: Burst pipe reported on the 4th floor of Clark Hall at 2:15 PM. Facilities says repair may take 2–3 hours. Some classrooms affected. Building closure not yet confirmed. Students with classes in rooms 401–410 should check with their instructors."></textarea>
+      <p id="speech-status" class="speech-status hidden" aria-live="polite"></p>
+      <p id="incident-error" class="field-error hidden">Please enter incident notes before generating an alert.</p>
 
-      <label for="language">Output language</label>
+      <label for="official-source">Official confirmation or source <span class="optional-tag">Optional</span></label>
+      <textarea id="official-source" class="source-textarea"
+        placeholder="Paste an update from SJSU Facilities, SJSU Police, emergency staff, or an official campus source."></textarea>
 
-      <select id="language">
-        <option value="English">English</option>
-        <option value="Mongolian">Mongolian</option>
-        <option value="Japanese">Japanese</option>
-        <option value="Chinese">Chinese</option>
-      </select>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="language">Output language</label>
+          <select id="language">
+            <option value="English">English</option>
+            <option value="Mongolian">Mongolian</option>
+            <option value="Japanese">Japanese</option>
+            <option value="Chinese">Chinese</option>
+          </select>
+        </div>
+        <div class="form-group btn-group">
+          <label class="invisible-label">&nbsp;</label>
+          <button id="generate-btn" onclick="generateAlert()">
+            <span id="btn-icon">&#x26A1;</span>
+            <span id="btn-text">Generate alert draft</span>
+          </button>
+        </div>
+      </div>
 
-      <button id="generate-btn" onclick="generateAlert()">Generate alert draft</button>
+      <p class="source-label">Source: Coordinator incident notes &mdash; AI draft requires human review before publishing.</p>
     </section>
 
     <!-- Loading state -->
     <section id="loading" class="card hidden">
       <div class="loading-inner">
         <div class="spinner"></div>
-        <p>Generating alert via Amazon Bedrock&#8230;</p>
+        <div>
+          <p class="loading-title">Generating alert with Amazon Bedrock&hellip;</p>
+          <p class="loading-sub">Summarizing incident, building action steps, and translating.</p>
+        </div>
       </div>
     </section>
 
@@ -64,39 +103,80 @@
 
     <!-- Result card -->
     <section id="result" class="card hidden">
+
       <div class="result-header">
         <div>
           <p class="section-label">AI-GENERATED DRAFT</p>
           <h2>Campus Alert</h2>
         </div>
-        <button id="copy-btn" onclick="copyAlert()">Copy alert</button>
+        <button id="copy-btn" onclick="copyAlert()">
+          <span id="copy-icon">&#x2398;</span>
+          <span id="copy-text">Copy alert</span>
+        </button>
       </div>
 
-      <div class="review-banner">
-        &#9888; NEEDS COORDINATOR REVIEW &#8212; Verify all details before publishing.
+      <div class="review-banner" role="alert">
+        <span class="review-icon">&#9888;</span>
+        <div>
+          <strong>NEEDS COORDINATOR REVIEW</strong>
+          <p>This is an AI-generated draft. Verify all facts, times, and locations before publishing to students.</p>
+        </div>
+      </div>
+
+      <!-- Verification & Priority panel -->
+      <div class="vp-panel">
+        <div class="vp-badges">
+          <div class="vp-badge-group">
+            <span class="vp-label">VERIFICATION</span>
+            <span id="verification-badge" class="vp-badge">—</span>
+          </div>
+          <div class="vp-badge-group">
+            <span class="vp-label">PRIORITY</span>
+            <span id="priority-badge" class="vp-badge">—</span>
+          </div>
+        </div>
+        <p id="priority-reason" class="priority-reason"></p>
+        <div class="vp-facts-row">
+          <div class="vp-facts-col confirmed-col">
+            <h4>&#x2705; Confirmed facts</h4>
+            <ul id="confirmed-facts"></ul>
+          </div>
+          <div class="vp-facts-col needs-col">
+            <h4>&#x26A0; Needs verification</h4>
+            <ul id="needs-verification"></ul>
+          </div>
+        </div>
+        <p class="vp-approval-note">&#x1F512; Coordinator approval required before publishing.</p>
       </div>
 
       <div class="alert-section">
-        <h3>Summary</h3>
+        <h3><span class="section-icon summary-icon">&#x1F4CB;</span> Summary</h3>
         <p id="summary"></p>
       </div>
 
       <div class="alert-section">
-        <h3>Student action steps</h3>
+        <h3><span class="section-icon steps-icon">&#x2705;</span> Student action steps</h3>
         <div id="action-steps"></div>
       </div>
 
       <div class="alert-section uncertainty-section">
-        <h3>Missing or uncertain information</h3>
+        <h3><span class="section-icon">&#x26A0;</span> Missing or uncertain information</h3>
         <p id="uncertainty"></p>
       </div>
 
-      <div class="alert-section translated-section">
-        <h3 id="translated-label">Translated alert</h3>
+      <div class="alert-section translated-section hidden">
+        <h3><span class="section-icon">&#x1F310;</span> <span id="translated-label">Translated alert</span></h3>
         <p id="translated"></p>
       </div>
+
+      <p class="result-source-label">Source: Coordinator incident notes &middot; Generated by SpartanSignal &middot; Powered by Amazon Bedrock</p>
+
     </section>
   </main>
+
+  <footer>
+    <p>SpartanSignal &mdash; SJSU Continuity Center &middot; Powered by Amazon Bedrock &middot; AI drafts require coordinator review before publishing.</p>
+  </footer>
 
   <script src="app.js"></script>
 </body>
