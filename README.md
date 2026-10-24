@@ -54,7 +54,7 @@ PORT=5000 python3 server.py
 
 1. SSH into your EC2 instance and clone the repo:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/spartansignal.git
+   git clone https://github.com/mollie50/spartansignal.git
    cd spartansignal
    ```
 
