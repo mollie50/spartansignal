@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpartanSignal</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header>
+    <p>SJSU CONTINUITY CENTER</p>
+    <h1>SpartanSignal</h1>
+    <span>&#x25CF; SYSTEM READY</span>
+  </header>
+
+  <main>
+    <section class="intro">
+      <p>EMERGENCY COMMUNICATIONS WORKSPACE</p>
+      <h2>Create a clear campus alert</h2>
+      <p>
+        Turn incident updates into accurate, multilingual messages
+        for the SJSU community.
+      </p>
+    </section>
+
+    <!-- Input card -->
+    <section class="card">
+      <label for="incident">Incident update</label>
+
+      <textarea id="incident"
+        placeholder="Example: Water issue near the Student Union. The building may close at 5 PM."></textarea>
+
+      <label for="language">Output language</label>
+
+      <select id="language">
+        <option value="English">English</option>
+        <option value="Mongolian">Mongolian</option>
+        <option value="Japanese">Japanese</option>
+        <option value="Chinese">Chinese</option>
+      </select>
+
+      <button id="generate-btn" onclick="generateAlert()">Generate alert draft</button>
+    </section>
+
+    <!-- Loading state -->
+    <section id="loading" class="card hidden">
+      <div class="loading-inner">
+        <div class="spinner"></div>
+        <p>Generating alert via Amazon Bedrock&#8230;</p>
+      </div>
+    </section>
+
+    <!-- Error state -->
+    <section id="error-card" class="card hidden">
+      <div class="error-banner">
+        <span class="error-icon">&#9888;</span>
+        <div>
+          <strong>Alert generation failed</strong>
+          <p id="error-msg"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Result card -->
+    <section id="result" class="card hidden">
+      <div class="result-header">
+        <div>
+          <p class="section-label">AI-GENERATED DRAFT</p>
+          <h2>Campus Alert</h2>
+        </div>
+        <button id="copy-btn" onclick="copyAlert()">Copy alert</button>
+      </div>
+
+      <div class="review-banner">
+        &#9888; NEEDS COORDINATOR REVIEW &#8212; Verify all details before publishing.
+      </div>
+
+      <div class="alert-section">
+        <h3>Summary</h3>
+        <p id="summary"></p>
+      </div>
+
+      <div class="alert-section">
+        <h3>Student action steps</h3>
+        <div id="action-steps"></div>
+      </div>
+
+      <div class="alert-section uncertainty-section">
+        <h3>Missing or uncertain information</h3>
+        <p id="uncertainty"></p>
+      </div>
+
+      <div class="alert-section translated-section">
+        <h3 id="translated-label">Translated alert</h3>
+        <p id="translated"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
