@@ -249,6 +249,12 @@ def generate():
     return jsonify(parsed)
 
 
+# ── Health check ──────────────────────────────────────────────────────────────
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"})
+
+
 # ── Serve the frontend ─────────────────────────────────────────────────────────
 @app.route("/")
 def index():
@@ -266,5 +272,6 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
 
-    print("SpartanSignal starting on http://localhost:8000")
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    port = int(os.environ.get("PORT", 8000))
+    print(f"SpartanSignal starting on http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
