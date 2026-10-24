@@ -25,7 +25,7 @@ Paste messy incident notes, optionally add an official source, pick a language, 
 
 ### 1. Install dependencies
 ```bash
-pip3 install flask flask-cors boto3
+pip3 install -r requirements.txt
 ```
 
 ### 2. Set environment variables
@@ -44,6 +44,44 @@ python3 server.py
 ```
 
 Open **http://localhost:8000** in your browser.
+
+To run on a different port:
+```bash
+PORT=5000 python3 server.py
+```
+
+## Deploying to Amazon EC2
+
+1. SSH into your EC2 instance and clone the repo:
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/spartansignal.git
+   cd spartansignal
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip3 install -r requirements.txt
+   ```
+
+3. Set environment variables (or add them to your instance's user data / environment file):
+   ```bash
+   export AWS_DEFAULT_REGION=us-east-1
+   export BEDROCK_MODEL_ID=us.amazon.nova-lite-v1:0
+   ```
+   On EC2 with an IAM role attached, you do not need to set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` — boto3 picks up the instance role automatically.
+
+4. Open port 8000 (or your chosen port) in the EC2 security group inbound rules.
+
+5. Start the server:
+   ```bash
+   PORT=8000 python3 server.py
+   ```
+
+6. Verify it is running:
+   ```bash
+   curl http://localhost:8000/health
+   # → {"status": "ok"}
+   ```
 
 ## How to use
 
