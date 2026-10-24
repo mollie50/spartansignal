@@ -52,29 +52,43 @@ PORT=5000 python3 server.py
 
 ## Deploying to Amazon EC2
 
+Tested on **Amazon Linux 2023** using **Flask + Boto3 + Amazon Bedrock** (Converse API).
+
 1. SSH into your EC2 instance and clone the repo:
    ```bash
    git clone https://github.com/mollie50/spartansignal.git
    cd spartansignal
    ```
 
-2. Install dependencies:
+2. Create and activate a virtual environment, then install dependencies:
    ```bash
-   pip3 install -r requirements.txt
+   python3 -m venv .venv
+   source .venv/bin/activate
+   python -m pip install -r requirements.txt
    ```
 
-3. Set environment variables (or add them to your instance's user data / environment file):
+3. Set environment variables:
    ```bash
    export AWS_DEFAULT_REGION=us-east-1
    export BEDROCK_MODEL_ID=us.amazon.nova-lite-v1:0
    ```
-   On EC2 with an IAM role attached, you do not need to set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` — boto3 picks up the instance role automatically.
+   > **IAM credentials note:** Attaching an IAM role to the EC2 instance is the preferred approach — boto3 picks up the role automatically and no credentials need to be set manually. This workshop account restricted role creation, so temporary workshop credentials were used at runtime instead:
+   > ```bash
+   > export AWS_ACCESS_KEY_ID=...
+   > export AWS_SECRET_ACCESS_KEY=...
+   > export AWS_SESSION_TOKEN=...
+   > ```
+   > Never commit real credentials to the repository.
 
-4. Open port 8000 (or your chosen port) in the EC2 security group inbound rules.
+4. Open port **8000** in the EC2 security group inbound rules.
 
-5. Start the server:
+5. Start the server (foreground):
    ```bash
-   PORT=8000 python3 server.py
+   PORT=8000 python server.py
+   ```
+   Or run it in the background and log output to a file:
+   ```bash
+   PORT=8000 nohup python server.py > spartansignal.log 2>&1 &
    ```
 
 6. Verify it is running:
